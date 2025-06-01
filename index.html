@@ -1142,8 +1142,10 @@ function loadExcelFile(file) {
 
        // console.log('App inizializzata. Pronta per caricare i dati.');
    // Caricamento automatico del Google Sheet predefinito
-const defaultSheetUrl = 'https://docs.google.com/spreadsheets/d/1CCvukFhXVdKXakVUZfUFRrc-4Tv-01AU/edit?usp=drivesdk&ouid=116613025297058558407&rtpof=true&sd=true';
 
+	    //const defaultSheetUrl = 'https://docs.google.com/spreadsheets/d/1CCvukFhXVdKXakVUZfUFRrc-4Tv-01AU/edit?usp=drivesdk&ouid=116613025297058558407&rtpof=true&sd=true';
+const defaultSheetUrl = 'https://docs.google.com/spreadsheets/d/1CCvukFhXVdKXakVUZfUFRrc-4Tv-01AU/edit?usp=drivesdk&ouid=116613025297058558407&rtpof=true&sd=true';
+	    
 // Carica automaticamente all'avvio
 document.getElementById('sheetUrl').value = defaultSheetUrl;
 loadSheet();
