@@ -1,3 +1,4 @@
+
 let allCourses = [];
 let currentView = 'list';
 let currentCalendarDate = new Date();
@@ -152,7 +153,69 @@ async function loadSheet() {
     }
 }
 
-// Funzione per parsare i dati JSON da Google Sheets
+// Funzione ottimizzata per parsare date con più formati
+function parseFlexibleDate(dateInput) {
+    if (!dateInput) return null;
+    
+    // Se è già un oggetto Date
+    if (dateInput instanceof Date) {
+        return isNaN(dateInput.getTime()) ? null : dateInput;
+    }
+    
+    // Se è un numero (formato Google Sheets)
+    if (typeof dateInput === 'number') {
+        try {
+            // Google Sheets salva le date come numeri (giorni da 1/1/1900)
+            const date = new Date((dateInput - 25569) * 86400 * 1000);
+            return isNaN(date.getTime()) ? null : date;
+        } catch (e) {
+            console.warn('Errore conversione data numerica:', dateInput, e);
+            return null;
+        }
+    }
+    
+    // Se è una stringa, prova diversi formati
+    if (typeof dateInput === 'string') {
+        const dateStr = dateInput.toString().trim();
+        if (!dateStr) return null;
+        
+        // Prova diversi formati di data
+        const dateFormats = [
+            dateStr, // Formato originale
+            dateStr.replace(/\//g, '-'), // Sostituisci / con -
+            dateStr.replace(/\./g, '-'), // Sostituisci . con -
+            dateStr.split('/').reverse().join('-'), // Inverti DD/MM/YYYY a YYYY-MM-DD
+            dateStr.split('.').reverse().join('-'), // Inverti DD.MM.YYYY a YYYY-MM-DD
+        ];
+        
+        for (const format of dateFormats) {
+            try {
+                const date = new Date(format);
+                if (!isNaN(date.getTime()) && date.getFullYear() > 1900) {
+                    return date;
+                }
+            } catch (e) {
+                // Continua con il prossimo formato
+            }
+        }
+        
+        console.warn('Impossibile parsare la data:', dateInput);
+        return null;
+    }
+    
+    return null;
+}
+
+// Funzione ottimizzata per estrarre e pulire il testo
+function extractText(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return value.toString().trim();
+    if (typeof value === 'object' && value.v !== undefined) return value.v.toString().trim();
+    return value.toString().trim();
+}
+
+// Funzione per parsare i dati JSON da Google Sheets - OTTIMIZZATA
 function parseJsonData(data) {
     const courses = [];
     
@@ -167,68 +230,56 @@ function parseJsonData(data) {
         for (let i = 0; i < data.table.rows.length; i++) {
             const row = data.table.rows[i];
             
-            if (!row.c || row.c.length < 3) {
-                console.log(`Riga ${i + 1} saltata: dati insufficienti`);
+            if (!row.c) {
+                console.log(`Riga ${i + 1} saltata: nessuna cella disponibile`);
                 continue;
             }
             
-            // Estrai i valori dalle celle
-            const startDate = row.c[0] ? (row.c[0].v || row.c[0].f || '') : '';
-            const endDate = row.c[1] ? (row.c[1].v || row.c[1].f || '') : '';
-            const course = row.c[2] ? (row.c[2].v || row.c[2].f || '') : '';
-            const notes = row.c[3] ? (row.c[3].v || row.c[3].f || '') : '';
+            // Estrai i valori dalle celle con maggiore flessibilità
+            const rawStartDate = row.c[0] ? (row.c[0].v || row.c[0].f || '') : '';
+            const rawEndDate = row.c[1] ? (row.c[1].v || row.c[1].f || '') : '';
+            const course = extractText(row.c[2] ? (row.c[2].v || row.c[2].f || '') : '');
+            const notes = extractText(row.c[3] ? (row.c[3].v || row.c[3].f || '') : '');
             
-            // Estrai istruttori (colonne 4-7)
+            // Estrai istruttori (colonne 4 e successive) - MENO RIGIDO
             const instructors = [];
-            for (let j = 4; j < 8; j++) {
-                if (row.c[j] && row.c[j].v) {
-                    const instructor = row.c[j].v.toString().trim();
-                    if (instructor) {
-                        instructors.push(instructor);
+            for (let j = 4; j < row.c.length && j < 10; j++) { // Controlla fino a 10 colonne
+                if (row.c[j]) {
+                    const instructorText = extractText(row.c[j].v || row.c[j].f || '');
+                    if (instructorText) {
+                        // Dividi per virgole se ci sono più istruttori in una cella
+                        const splitInstructors = instructorText.split(',').map(inst => inst.trim()).filter(inst => inst);
+                        instructors.push(...splitInstructors);
                     }
                 }
             }
             
-            // Salta le righe senza dati essenziali
-            if (!course || course.toString().trim() === '' || instructors.length === 0) {
-                console.log(`Riga ${i + 1} saltata: corso o istruttori mancanti`);
+            // VALIDAZIONE MENO SEVERA - Basta che ci sia il corso
+            if (!course) {
+                console.log(`Riga ${i + 1} saltata: nessun nome corso`);
                 continue;
             }
             
-            // Determina la data da usare (priorità: data inizio, poi data fine)
-            let dateToUse = startDate || endDate;
+            // Parsing date con maggiore flessibilità
+            const parsedStartDate = parseFlexibleDate(rawStartDate);
+            const parsedEndDate = parseFlexibleDate(rawEndDate);
             
-            if (!dateToUse) {
-                console.log(`Riga ${i + 1} saltata: nessuna data disponibile`);
-                continue;
-            }
+            // Se non c'è una data valida, usa la data odierna come fallback
+            const finalStartDate = parsedStartDate || new Date();
+            const finalEndDate = parsedEndDate || parsedStartDate || finalStartDate;
             
-            // Converti la data
-            let parsedDate;
-            if (typeof dateToUse === 'number') {
-                // Google Sheets salva le date come numeri (giorni da 1/1/1900)
-                parsedDate = new Date((dateToUse - 25569) * 86400 * 1000);
-            } else if (typeof dateToUse === 'string') {
-                parsedDate = new Date(dateToUse);
-            } else {
-                console.log(`Riga ${i + 1} saltata: formato data non riconosciuto:`, dateToUse);
-                continue;
-            }
-            
-            if (isNaN(parsedDate.getTime())) {
-                console.log(`Riga ${i + 1} saltata: data non valida:`, dateToUse);
-                continue;
-            }
+            // Se non ci sono istruttori, usa un placeholder
+            const finalInstructors = instructors.length > 0 ? instructors : ['Da definire'];
             
             courses.push({
-                startDate: parsedDate,
-                endDate: endDate ? (typeof endDate === 'number' ? new Date((endDate - 25569) * 86400 * 1000) : new Date(endDate)) : parsedDate,
-                course: course.toString().trim(),
-                notes: notes.toString().trim(),
-                instructors: instructors
+                startDate: finalStartDate,
+                endDate: finalEndDate,
+                course: course,
+                notes: notes,
+                instructors: finalInstructors
             });
             
-            console.log(`Corso aggiunto: ${course}, istruttori: ${instructors.join(', ')}`);
+            console.log(`Corso aggiunto: ${course}, istruttori: ${finalInstructors.join(', ')}, data: ${finalStartDate.toLocaleDateString()}`);
         }
         
     } catch (error) {
@@ -238,99 +289,127 @@ function parseJsonData(data) {
     return courses;
 }
 
-// Funzione per parsare i dati CSV
+// Funzione ottimizzata per parsare CSV con maggiore flessibilità
 function parseCsvData(csvText) {
     const courses = [];
     const lines = csvText.split('\n');
     
     console.log('Linee CSV totali:', lines.length);
     
-    // Salta la prima riga (intestazioni) e processa le righe dati
-    for (let i = 1; i < lines.length; i++) {
+    // Trova la riga di intestazione (potrebbe non essere la prima)
+    let headerRowIndex = -1;
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+        const line = lines[i].toLowerCase();
+        if (line.includes('corso') || line.includes('data') || line.includes('istruttore')) {
+            headerRowIndex = i;
+            break;
+        }
+    }
+    
+    const startFromRow = headerRowIndex >= 0 ? headerRowIndex + 1 : 1;
+    console.log(`Iniziando parsing dalla riga ${startFromRow}`);
+    
+    // Processa le righe dati
+    for (let i = startFromRow; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        // Parsing CSV più robusto che gestisce virgole all'interno delle virgolette
+        // Parsing CSV più robusto
         const fields = parseCSVLine(line);
         
         console.log(`Riga ${i + 1} - Campi trovati:`, fields.length, fields);
         
-        if (fields.length < 5) {
+        // VALIDAZIONE MENO RIGIDA - Almeno 3 campi necessari
+        if (fields.length < 3) {
             console.log(`Riga ${i + 1} saltata: campi insufficienti (${fields.length})`);
             continue;
         }
         
-        const startDate = fields[0] ? fields[0].trim() : '';
-        const endDate = fields[1] ? fields[1].trim() : '';
+        const rawStartDate = fields[0] ? fields[0].trim() : '';
+        const rawEndDate = fields[1] ? fields[1].trim() : '';
         const course = fields[2] ? fields[2].trim() : '';
         const notes = fields[3] ? fields[3].trim() : '';
         
-        // Estrai istruttori (colonne 4-7)
+        // Estrai istruttori con maggiore flessibilità
         const instructors = [];
-        for (let j = 4; j < Math.min(8, fields.length); j++) {
+        for (let j = 4; j < fields.length; j++) {
             if (fields[j] && fields[j].trim()) {
-                instructors.push(fields[j].trim());
+                const instructorField = fields[j].trim();
+                // Dividi per virgole se ci sono più istruttori
+                const splitInstructors = instructorField.split(',').map(inst => inst.trim()).filter(inst => inst);
+                instructors.push(...splitInstructors);
             }
         }
         
-        // Salta le righe senza dati essenziali
-        if (!course || instructors.length === 0) {
-            console.log(`Riga ${i + 1} saltata: corso o istruttori mancanti`);
+        // VALIDAZIONE MENO SEVERA - Basta il nome del corso
+        if (!course) {
+            console.log(`Riga ${i + 1} saltata: nessun nome corso`);
             continue;
         }
         
-        // Determina la data da usare (priorità: data inizio, poi data fine)
-        const dateToUse = startDate || endDate;
+        // Parsing date con maggiore flessibilità
+        const parsedStartDate = parseFlexibleDate(rawStartDate);
+        const parsedEndDate = parseFlexibleDate(rawEndDate);
         
-        if (!dateToUse) {
-            console.log(`Riga ${i + 1} saltata: nessuna data disponibile`);
-            continue;
-        }
+        // Usa date di fallback se necessario
+        const finalStartDate = parsedStartDate || new Date();
+        const finalEndDate = parsedEndDate || parsedStartDate || finalStartDate;
         
-        // Converti la data
-        const parsedStartDate = new Date(dateToUse);
-        const parsedEndDate = endDate ? new Date(endDate) : parsedStartDate;
-        
-        if (isNaN(parsedStartDate.getTime())) {
-            console.log(`Riga ${i + 1} saltata: data non valida:`, dateToUse);
-            continue;
-        }
+        // Se non ci sono istruttori, usa un placeholder
+        const finalInstructors = instructors.length > 0 ? instructors : ['Da definire'];
         
         courses.push({
-            startDate: parsedStartDate,
-            endDate: parsedEndDate,
+            startDate: finalStartDate,
+            endDate: finalEndDate,
             course: course,
             notes: notes,
-            instructors: instructors
+            instructors: finalInstructors
         });
         
-        console.log(`Corso aggiunto: ${course}, istruttori: ${instructors.join(', ')}`);
+        console.log(`Corso aggiunto: ${course}, istruttori: ${finalInstructors.join(', ')}, data: ${finalStartDate.toLocaleDateString()}`);
     }
     
     return courses;
 }
 
-// Funzione helper per parsare una riga CSV gestendo le virgolette
+// Funzione helper per parsare una riga CSV gestendo le virgolette - MIGLIORATA
 function parseCSVLine(line) {
     const fields = [];
     let current = '';
     let inQuotes = false;
+    let i = 0;
     
-    for (let i = 0; i < line.length; i++) {
+    while (i < line.length) {
         const char = line[i];
         
         if (char === '"') {
-            inQuotes = !inQuotes;
+            // Gestisci virgolette doppie ("") come escape
+            if (i + 1 < line.length && line[i + 1] === '"') {
+                current += '"';
+                i += 2; // Salta entrambe le virgolette
+            } else {
+                inQuotes = !inQuotes;
+                i++;
+            }
         } else if (char === ',' && !inQuotes) {
-            fields.push(current);
+            fields.push(current.trim());
             current = '';
+            i++;
         } else {
             current += char;
+            i++;
         }
     }
     
-    fields.push(current);
-    return fields;
+    fields.push(current.trim());
+    
+    // Rimuovi virgolette iniziali/finali se presenti
+    return fields.map(field => {
+        if (field.startsWith('"') && field.endsWith('"')) {
+            return field.slice(1, -1);
+        }
+        return field;
+    });
 }
 
 // Funzione per caricare file locali
