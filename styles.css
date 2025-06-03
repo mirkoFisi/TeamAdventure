@@ -115,12 +115,48 @@ select:focus, input:focus {
     margin: 20px 0;
 }
 
+/* AREA SCROLLABILE PER I CORSI */
+.list-view {
+    max-height: 600px; /* Altezza massima dell'area */
+    overflow-y: auto; /* Abilita scroll verticale */
+    padding-right: 10px; /* Spazio per la scrollbar */
+    border-radius: 12px;
+    background: rgba(42, 77, 58, 0.05);
+    border: 1px solid rgba(42, 77, 58, 0.2);
+}
+
+/* Personalizzazione della scrollbar per un aspetto più elegante */
+.list-view::-webkit-scrollbar {
+    width: 8px;
+}
+
+.list-view::-webkit-scrollbar-track {
+    background: #2a2a2a;
+    border-radius: 4px;
+}
+
+.list-view::-webkit-scrollbar-thumb {
+    background: #2a4d3a;
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+.list-view::-webkit-scrollbar-thumb:hover {
+    background: #1e3326;
+}
+
+/* Per browser Firefox */
+.list-view {
+    scrollbar-width: thin;
+    scrollbar-color: #2a4d3a #2a2a2a;
+}
+
 .course-card {
     background: linear-gradient(135deg, #333 0%, #2a2a2a 100%);
     border: 1px solid #4a4a4a;
     border-radius: 12px;
     padding: 20px;
-    margin-bottom: 15px;
+    margin: 15px 10px 15px 0; /* Margine destro ridotto per compensare il padding dello scroll */
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
@@ -198,6 +234,27 @@ select:focus, input:focus {
     border-top: 1px solid #444;
     color: #b0b0b0;
     font-style: italic;
+}
+
+/* Indicatore visivo per lo scroll */
+.scroll-indicator {
+    position: sticky;
+    top: 0;
+    background: linear-gradient(to bottom, rgba(42, 77, 58, 0.9), transparent);
+    height: 20px;
+    margin-bottom: -20px;
+    z-index: 10;
+    pointer-events: none;
+    border-radius: 12px 12px 0 0;
+}
+
+.scroll-indicator.bottom {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(to top, rgba(42, 77, 58, 0.9), transparent);
+    margin-top: -20px;
+    margin-bottom: 0;
+    border-radius: 0 0 12px 12px;
 }
 
 .calendar-view {
@@ -360,5 +417,10 @@ select:focus, input:focus {
 
     .calendar-day {
         min-height: 80px;
+    }
+
+    /* Su mobile, altezza leggermente ridotta per lo scroll */
+    .list-view {
+        max-height: 500px;
     }
 }
